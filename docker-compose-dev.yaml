@@ -1,0 +1,214 @@
+networks:
+  vybe-server:
+    name: vybe-server
+services:
+  apollo:
+    command: bash -c "./post-start.sh && npm run serve"
+    depends_on:
+    - graphql
+    - hasura
+    environment:
+      GRAPHQL_SERVICE_HOST: http://graphql
+      GRAPHQL_SERVICE_PORT: 4201
+      HASURA_API_URL: http://hasura:3000/v1alpha1/graphql
+      PREFECT_API_HEALTH_URL: http://graphql:4201/health
+      PREFECT_API_URL: http://graphql:4201/graphql/
+      PREFECT_SERVER__TELEMETRY__ENABLED: "true"
+    healthcheck:
+      interval: 10s
+      retries: 60
+      start_period: 1s
+      test: curl --fail --silent "http://apollo:4200/.well-known/apollo/server-health"
+        &> /dev/null || exit 1
+      timeout: 2s
+    image: prefecthq/apollo:core-0.15.4
+    networks:
+      vybe-server: null
+    ports:
+    - published: 4200
+      target: 4200
+    restart: always
+  graphql:
+    command: bash -c "prefect-server database upgrade -y && python src/prefect_server/services/graphql/server.py"
+    depends_on:
+    - hasura
+    environment:
+      PREFECT_CORE_VERSION: 0.15.4
+      PREFECT_SERVER_DB_CMD: prefect-server database upgrade -y
+      PREFECT_SERVER__DATABASE__CONNECTION_URL: postgresql://prefect:test-password@postgres:5432/prefect_server
+      PREFECT_SERVER__HASURA__ADMIN_SECRET: hasura-secret-admin-secret
+      PREFECT_SERVER__HASURA__HOST: hasura
+    healthcheck:
+      interval: 20s
+      retries: 60
+      start_period: 1s
+      test: curl --fail --silent "http://graphql:4201/health" &> /dev/null || exit
+        1
+      timeout: 2s
+    image: prefecthq/server:core-0.15.4
+    networks:
+      vybe-server: null
+    ports:
+    - published: 4201
+      target: 4201
+    restart: always
+  hasura:
+    command: graphql-engine serve
+    depends_on:
+    - postgres
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: postgresql://prefect:test-password@postgres:5432/prefect_server
+      HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
+      HASURA_GRAPHQL_LOG_LEVEL: warn
+      HASURA_GRAPHQL_QUERY_PLAN_CACHE_SIZE: 100
+      HASURA_GRAPHQL_SERVER_PORT: '3000'
+    healthcheck:
+      interval: 10s
+      retries: 60
+      start_period: 1s
+      test: wget -O - http://hasura:$${HASURA_GRAPHQL_SERVER_PORT}/healthz &>/dev/null
+        || exit 1
+      timeout: 2s
+    image: hasura/graphql-engine:v1.3.3
+    networks:
+      vybe-server: null
+    ports:
+    - published: 3000
+      target: 3000
+    restart: always
+  hasuravybe:
+    command: graphql-engine serve
+    depends_on:
+    - postgresvybe
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: postgresql://hasura:hasura@postgresvybe:5433/hasura
+      HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
+      HASURA_GRAPHQL_LOG_LEVEL: warn
+      HASURA_GRAPHQL_QUERY_PLAN_CACHE_SIZE: 100
+      HASURA_GRAPHQL_SERVER_PORT: '3005'
+    image: gcr.io/vybe-network/hasura:0.0.2
+    networks:
+      vybe-server: null
+    ports:
+      - published: 3005
+        target: 3005
+    restart: always
+  proxy:
+    depends_on:
+    - vybeui
+    image: gcr.io/vybe-network/reverse_proxy:0.0.4
+    networks:
+      vybe-server: null
+    ports:
+      - published: 8089
+        target: 80
+    restart: always
+  postgres:
+    command:
+    - postgres
+    - -c
+    - max_connections=150
+    environment:
+      POSTGRES_DB: prefect_server
+      POSTGRES_PASSWORD: test-password
+      POSTGRES_USER: prefect
+    healthcheck:
+      interval: 10s
+      retries: 60
+      start_period: 2s
+      test: pg_isready -q -d $${POSTGRES_DB} -U $${POSTGRES_USER} || exit 1
+      timeout: 2s
+    image: postgres:11
+    networks:
+      vybe-server: null
+    ports:
+    - published: 5432
+      target: 5432
+    restart: always
+  postgresvybe:
+    command:
+    - postgres
+    - -c
+    - max_connections=150
+    - -c
+    - port=5433
+    environment:
+      POSTGRES_DB: hasura
+      POSTGRES_PASSWORD: hasura
+      POSTGRES_USER: hasura
+    healthcheck:
+      interval: 10s
+      retries: 60
+      start_period: 2s
+      test: pg_isready -q -d $${POSTGRES_DB} -U $${POSTGRES_USER} || exit 1
+      timeout: 2s
+    image: gcr.io/vybe-network/postgres:0.0.1
+    networks:
+      vybe-server: null
+    ports:
+    - published: 5433
+      target: 5433
+    restart: always
+  towel:
+    command: python src/prefect_server/services/towel/__main__.py
+    depends_on:
+    - graphql
+    environment:
+      PREFECT_SERVER__HASURA__ADMIN_SECRET: hasura-secret-admin-secret
+      PREFECT_SERVER__HASURA__HOST: hasura
+    image: prefecthq/server:core-0.15.4
+    networks:
+      vybe-server: null
+    restart: always
+  ui:
+    command: /intercept.sh
+    depends_on:
+    - apollo
+    environment:
+      PREFECT_SERVER__APOLLO_URL: http://localhost:4200/graphql
+    healthcheck:
+      interval: 30s
+      retries: 3
+      test: curl --fail --silent --head "http://ui:8080/" &> /dev/null || exit 1
+      timeout: 5s
+    image: prefecthq/ui:core-0.15.4
+    networks:
+      vybe-server: null
+    ports:
+    - published: 8080
+      target: 8080
+    restart: always
+  vybebe:
+    depends_on:
+    - hasuravybe
+    - ui
+    environment:
+      HASURA_API_URL: http://hasuravybe:3005
+      PREFECT__BACKEND: server
+      PREFECT__SERVER__DATABASE__HOST: postgres
+      PREFECT__SERVER__GRAPHQL__HOST: graphql
+      PREFECT__SERVER__HASURA__HOST: hasura
+      PREFECT__SERVER__HOST: http://apollo
+      PREFECT__SERVER__UI__APOLLO_URL: http://apollo:4200/graphql
+      PREFECT__SERVER__UI__HOST: ui
+      SERVER_BASE_URL: https://vybebe
+      VYBE_DATABASE_URL: postgresql://vybe:solanasummerlfg@postgresvybe:5433/vybe
+    image: gcr.io/vybe-network/vybe_be:0.0.52
+    networks:
+      vybe-server: null
+    ports:
+      - published: 8000
+        target: 8000
+    restart: always
+  vybeui:
+    depends_on:
+    - vybebe
+    image: gcr.io/vybe-network/vybe_fe:0.0.22
+    networks:
+      vybe-server: null
+    ports:
+    - published: 8888
+      target: 8888
+    restart: always
+version: '3.5'
+
