@@ -14,4 +14,6 @@ docker-compose -f docker-compose-dev.yaml up -d
 
 This will compose the multiple services that make up the product
 
+Visit Localhost:8089 to access the UI
+
 
