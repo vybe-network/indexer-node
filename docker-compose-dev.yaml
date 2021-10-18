@@ -1,6 +1,6 @@
 networks:
-  vybe-server:
-    name: vybe-server
+  prefect-server:
+    name: prefect-server
 services:
   apollo:
     command: bash -c "./post-start.sh && npm run serve"
@@ -23,7 +23,7 @@ services:
       timeout: 2s
     image: prefecthq/apollo:core-0.15.4
     networks:
-      vybe-server: null
+      prefect-server: null
     ports:
     - published: 4200
       target: 4200
@@ -47,7 +47,7 @@ services:
       timeout: 2s
     image: prefecthq/server:core-0.15.4
     networks:
-      vybe-server: null
+      prefect-server: null
     ports:
     - published: 4201
       target: 4201
@@ -71,7 +71,7 @@ services:
       timeout: 2s
     image: hasura/graphql-engine:v1.3.3
     networks:
-      vybe-server: null
+      prefect-server: null
     ports:
     - published: 3000
       target: 3000
@@ -86,9 +86,9 @@ services:
       HASURA_GRAPHQL_LOG_LEVEL: warn
       HASURA_GRAPHQL_QUERY_PLAN_CACHE_SIZE: 100
       HASURA_GRAPHQL_SERVER_PORT: '3005'
-    image: gcr.io/vybe-network/hasura:0.0.2
+    image: gcr.io/vybe-network/hasura:0.0.6
     networks:
-      vybe-server: null
+      prefect-server: null
     ports:
       - published: 3005
         target: 3005
@@ -98,7 +98,7 @@ services:
     - vybeui
     image: gcr.io/vybe-network/reverse_proxy:0.0.4
     networks:
-      vybe-server: null
+      prefect-server: null
     ports:
       - published: 8089
         target: 80
@@ -120,7 +120,7 @@ services:
       timeout: 2s
     image: postgres:11
     networks:
-      vybe-server: null
+      prefect-server: null
     ports:
     - published: 5432
       target: 5432
@@ -144,7 +144,7 @@ services:
       timeout: 2s
     image: gcr.io/vybe-network/postgres:0.0.1
     networks:
-      vybe-server: null
+      prefect-server: null
     ports:
     - published: 5433
       target: 5433
@@ -158,7 +158,7 @@ services:
       PREFECT_SERVER__HASURA__HOST: hasura
     image: prefecthq/server:core-0.15.4
     networks:
-      vybe-server: null
+      prefect-server: null
     restart: always
   ui:
     command: /intercept.sh
@@ -173,13 +173,14 @@ services:
       timeout: 5s
     image: prefecthq/ui:core-0.15.4
     networks:
-      vybe-server: null
+      prefect-server: null
     ports:
     - published: 8080
       target: 8080
     restart: always
   vybebe:
     depends_on:
+    - apollo
     - hasuravybe
     - ui
     environment:
@@ -193,9 +194,9 @@ services:
       PREFECT__SERVER__UI__HOST: ui
       SERVER_BASE_URL: https://vybebe
       VYBE_DATABASE_URL: postgresql://vybe:solanasummerlfg@postgresvybe:5433/vybe
-    image: gcr.io/vybe-network/vybe_be:0.0.52
+    image: gcr.io/vybe-network/vybe_be:0.0.70
     networks:
-      vybe-server: null
+      prefect-server: null
     ports:
       - published: 8000
         target: 8000
@@ -203,9 +204,9 @@ services:
   vybeui:
     depends_on:
     - vybebe
-    image: gcr.io/vybe-network/vybe_fe:0.0.22
+    image: gcr.io/vybe-network/vybe_fe:0.0.23
     networks:
-      vybe-server: null
+      prefect-server: null
     ports:
     - published: 8888
       target: 8888
