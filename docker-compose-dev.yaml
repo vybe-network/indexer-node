@@ -24,9 +24,6 @@ services:
     image: prefecthq/apollo:core-0.15.4
     networks:
       prefect-server: null
-    ports:
-    - published: 4200
-      target: 4200
     restart: always
   graphql:
     command: bash -c "prefect-server database upgrade -y && python src/prefect_server/services/graphql/server.py"
@@ -48,9 +45,6 @@ services:
     image: prefecthq/server:core-0.15.4
     networks:
       prefect-server: null
-    ports:
-    - published: 4201
-      target: 4201
     restart: always
   hasura:
     command: graphql-engine serve
@@ -72,9 +66,6 @@ services:
     image: hasura/graphql-engine:v1.3.3
     networks:
       prefect-server: null
-    ports:
-    - published: 3000
-      target: 3000
     restart: always
   hasuravybe:
     command: graphql-engine serve
@@ -89,9 +80,6 @@ services:
     image: gcr.io/vybe-network/hasura:0.0.6
     networks:
       prefect-server: null
-    ports:
-      - published: 3005
-        target: 3005
     restart: always
   proxy:
     depends_on:
@@ -121,9 +109,6 @@ services:
     image: postgres:11
     networks:
       prefect-server: null
-    ports:
-    - published: 5432
-      target: 5432
     restart: always
   postgresvybe:
     command:
@@ -145,9 +130,6 @@ services:
     image: gcr.io/vybe-network/postgres:0.0.1
     networks:
       prefect-server: null
-    ports:
-    - published: 5433
-      target: 5433
     restart: always
   towel:
     command: python src/prefect_server/services/towel/__main__.py
@@ -160,29 +142,10 @@ services:
     networks:
       prefect-server: null
     restart: always
-  ui:
-    command: /intercept.sh
-    depends_on:
-    - apollo
-    environment:
-      PREFECT_SERVER__APOLLO_URL: http://localhost:4200/graphql
-    healthcheck:
-      interval: 30s
-      retries: 3
-      test: curl --fail --silent --head "http://ui:8080/" &> /dev/null || exit 1
-      timeout: 5s
-    image: prefecthq/ui:core-0.15.4
-    networks:
-      prefect-server: null
-    ports:
-    - published: 8080
-      target: 8080
-    restart: always
   vybebe:
     depends_on:
     - apollo
     - hasuravybe
-    - ui
     environment:
       HASURA_API_URL: http://hasuravybe:3005
       PREFECT__BACKEND: server
@@ -197,9 +160,6 @@ services:
     image: gcr.io/vybe-network/vybe_be:0.0.70
     networks:
       prefect-server: null
-    ports:
-      - published: 8000
-        target: 8000
     restart: always
   vybeui:
     depends_on:
@@ -207,9 +167,6 @@ services:
     image: gcr.io/vybe-network/vybe_fe:0.0.23
     networks:
       prefect-server: null
-    ports:
-    - published: 8888
-      target: 8888
     restart: always
 version: '3.5'
 
